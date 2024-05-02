@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/fern-api/fern/main/fern.schema.json
+imports:
+  commons: ./commons.yml
+  pagination: ./utils/pagination.yml
+service:
+  auth: true
+  base-path: /api/public
+  endpoints:
+    list:
+      method: GET
+      docs: Get all datasets
+      path: /datasets
+      request:
+        name: GetDatasetsRequest
+        query-parameters:
+          page: optional<integer>
+          limit: optional<integer>
+      response: PaginatedDatasets
+    get:
+      method: GET
+      docs: Get a dataset and its items
+      path: /datasets/{datasetName}
+      path-parameters:
+        datasetName: string
+      response: commons.Dataset
+    create:
+      method: POST
+      docs: Create a dataset
+      path: /datasets
+      request: CreateDatasetRequest
+      response: commons.Dataset
+    getRuns:
+      method: GET
+      docs: Get a dataset run and its items
+      path: /datasets/{datasetName}/runs/{runName}
+      path-parameters:
+        datasetName: string
+        runName: string
+      response: commons.DatasetRun
+
+types:
+  PaginatedDatasets:
+    properties:
+      data: list<commons.DatasetWithReferences>
+      meta: pagination.MetaResponse
+  CreateDatasetRequest:
+    properties:
+      name: string
+      description: optional<string>
+      metadata: optional<unknown>

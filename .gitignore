@@ -1,0 +1,15 @@
+# env 
+.env
+venv
+*venv
+*venv/
+*venv/**
+
+# backup
+BAK*
+*BAK
+
+# cache-cache
+__pycache__/*
+__pycache__
+*.cyp

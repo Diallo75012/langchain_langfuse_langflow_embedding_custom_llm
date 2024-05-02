@@ -1,0 +1,231 @@
+types:
+  # Objects
+  Trace:
+    properties:
+      id:
+        type: string
+        docs: The unique identifier of a trace
+      timestamp: datetime
+      name: optional<string>
+      input: optional<unknown>
+      output: optional<unknown>
+      sessionId: optional<string>
+      release: optional<string>
+      version: optional<string>
+      userId: optional<string>
+      metadata: optional<unknown>
+      tags: optional<list<string>>
+      public:
+        type: optional<boolean>
+        docs: Public traces are accessible via url without login
+  TraceWithDetails: # GET /traces
+    extends: Trace
+    properties:
+      htmlPath:
+        type: string
+        docs: Path of trace in Langfuse UI
+      latency:
+        type: double
+        docs: Latency of trace in seconds
+      totalCost:
+        type: double
+        docs: Cost of trace in USD
+      observations:
+        type: list<string>
+        docs: List of observation ids
+      scores:
+        type: list<string>
+        docs: List of score ids
+  TraceWithFullDetails: # GET traces/[traceID]
+    extends: Trace
+    properties:
+      htmlPath:
+        type: string
+        docs: Path of trace in Langfuse UI
+      totalCost:
+        type: double
+        docs: Cost of trace in USD
+      observations: list<ObservationsView>
+      scores: list<Score>
+  Session:
+    properties:
+      id: string
+      createdAt: datetime
+      projectId: string
+  SessionWithTraces:
+    extends: Session
+    properties:
+      traces: list<Trace>
+  Observation:
+    properties:
+      id: string
+      traceId: optional<string>
+      type: string
+      name: optional<string>
+      startTime: datetime
+      endTime: optional<datetime>
+      completionStartTime: optional<datetime>
+      model: optional<string>
+      modelParameters: optional<map<string, MapValue>>
+      input: optional<unknown>
+      version: optional<string>
+      metadata: optional<unknown>
+      output: optional<unknown>
+      usage: optional<Usage>
+      level: ObservationLevel
+      statusMessage: optional<string>
+      parentObservationId: optional<string>
+      promptId: optional<string>
+
+  ObservationsView:
+    extends: Observation
+    properties:
+      modelId: optional<string>
+      inputPrice: optional<double>
+      outputPrice: optional<double>
+      totalPrice: optional<double>
+      calculatedInputCost: optional<double>
+      calculatedOutputCost: optional<double>
+      calculatedTotalCost: optional<double>
+      latency: optional<double>
+
+  Usage:
+    docs: Standard interface for usage and cost
+    properties:
+      input:
+        docs: Number of input units (e.g. tokens)
+        type: optional<integer>
+      output:
+        docs: Number of output units (e.g. tokens)
+        type: optional<integer>
+      total:
+        docs: Defaults to input+output if not set
+        type: optional<integer>
+      unit: optional<ModelUsageUnit>
+      inputCost:
+        docs: USD input cost
+        type: optional<double>
+      outputCost:
+        docs: USD output cost
+        type: optional<double>
+      totalCost:
+        docs: USD total cost, defaults to input+output
+        type: optional<double>
+
+  Score:
+    properties:
+      id: string
+      traceId: string
+      name: string
+      value: double
+      source: ScoreSource
+      observationId: optional<string>
+      timestamp: datetime
+      comment: optional<string>
+  DatasetCore:
+    properties:
+      id: string
+      name: string
+      description: optional<string>
+      metadata: optional<unknown>
+      projectId: string
+      createdAt: datetime
+      updatedAt: datetime
+  DatasetWithReferences: # GET datasets
+    extends: DatasetCore
+    properties:
+      items:
+        type: list<string>
+        docs: list of dataset item ids
+      runs:
+        type: list<string>
+        docs: list of dataset run names
+  Dataset: # GET datasets/[name]
+    docs: Dataset including all items
+    extends: DatasetCore
+    properties:
+      items: list<DatasetItem>
+      runs: list<string>
+  DatasetItem:
+    properties:
+      id: string
+      status: DatasetStatus
+      input: optional<unknown>
+      expectedOutput: optional<unknown>
+      metadata: optional<unknown>
+      sourceTraceId: optional<string>
+      sourceObservationId: optional<string>
+      datasetId: string
+      datasetName: string
+      createdAt: datetime
+      updatedAt: datetime
+  DatasetRunItem:
+    properties:
+      id: string
+      datasetRunId: string
+      datasetRunName: string
+      datasetItemId: string
+      traceId: string
+      observationId: optional<string>
+      createdAt: datetime
+      updatedAt: datetime
+  DatasetRun:
+    properties:
+      id: string
+      name: string
+      description: optional<string>
+      metadata: optional<unknown>
+      datasetId: string
+      datasetName: string
+      createdAt: datetime
+      updatedAt: datetime
+      datasetRunItems: list<DatasetRunItem>
+
+  # Utilities
+  ModelUsageUnit:
+    docs: Unit of usage in Langfuse
+    enum:
+      - CHARACTERS
+      - TOKENS
+      - MILLISECONDS
+      - SECONDS
+      - IMAGES
+  ObservationLevel:
+    enum:
+      - DEBUG
+      - DEFAULT
+      - WARNING
+      - ERROR
+  MapValue:
+    discriminated: false
+    union:
+      - optional<string>
+      - optional<integer>
+      - optional<boolean>
+      - optional<list<string>>
+  DatasetStatus:
+    enum:
+      - ACTIVE
+      - ARCHIVED
+  ScoreSource:
+    enum:
+      - API
+      - REVIEW
+      - EVAL
+
+errors:
+  Error:
+    status-code: 400
+    type: unknown
+  UnauthorizedError:
+    status-code: 401
+    type: unknown
+  AccessDeniedError:
+    status-code: 403
+    type: unknown
+  NotFoundError:
+    status-code: 404
+    type: unknown
+  MethodNotAllowedError:
+    status-code: 405
+    type: unknown

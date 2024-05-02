@@ -1,0 +1,511 @@
+# note about project
+
+# langfuse will be self hosted using docker predifined version for stability and not the latest. We will need to create a .env file with all of those env. vars
+# langfuse command to start the docker local deployement:
+# pull the image
+docker pull langfuse/langfuse:2
+# run langfuse
+docker run --name langfuse \
+-e DATABASE_URL=<POSTGRESQL_DB_URI> \
+-e NEXTAUTH_URL=http://0.0.0.0:3000 \
+-e NEXTAUTH_SECRET=mysecret \
+-e SALT=mysalt \
+-p 3000:3000 \
+-a STDOUT \
+langfuse/langfuse:2
+
+
+# create a randomly generate key and save it in you .env file for the SALT variable of langfuse
+openssl rand -base64 32
+outputs: IHU55ma/DmmwHGqkAM+22gyXeDdpG/yujYrdK81Ouf0=
+
+# do the same to generate the NEXTAUTH_SECRET variable
+openssl rand -base64 32
+outputs: 3doC8TqLv4fkaxgGCZUlPjgbzaOq/iWvyi2yrnoYITo=
+
+#### POSTGRESQL 
+# user creation script
+CAT postgresql_create_user_and_db.sh:
+#!/usr/bin/bash
+# source/load env. vars 
+. ./.env
+echo "************** CREATING DATABASE & USER *******************"
+sudo su postgres <<EOF
+createdb  $DATABASE_NAME;
+psql -c "CREATE ROLE $DATABASE_USERNAME;"
+psql -c "ALTER ROLE $DATABASE_USERNAME WITH LOGIN;"
+psql -c "ALTER ROLE $DATABASE_USERNAME WITH SUPERUSER;"
+psql -c "CREATE USER $DATABASE_USERNAME WITH PASSWORD '$DATABASE_PASSWORD';"
+psql -c "ALTER ROLE $DATABASE_USERNAME SET client_encoding TO 'utf8';"
+psql -c "ALTER ROLE $DATABASE_USERNAME SET default_transaction_isolation TO 'read committed';"
+psql -c "ALTER ROLE $DATABASE_USERNAME SET timezone TO 'UTC';"
+psql -c "grant all privileges on database $DATABASE_NAME to $DATABASE_USERNAME;"
+exit
+EOF
+#echo "************** RESTARTING POSTGRESL *******************"
+sudo service postgresql restart
+
+# make it executable
+sudo chmod +x postgresql_create_user_and_db.sh
+
+# make sure that permission is the same for /home and /home/<USER> to avoid permission denied to access the user folder
+sudo chmod og+X /home /home/creditizens
+
+# execute script
+sh postgresql_create_user_and_db.sh
+OUTPUTS (had errors before but some were already created): 
+************** CREATING DATABASE & USER *******************
+createdb: error: database creation failed: ERROR:  database "langembeddings" already exists
+ERROR:  role "creditizens" already exists
+ALTER ROLE
+ALTER ROLE
+ERROR:  role "creditizens" already exists
+ALTER ROLE
+ALTER ROLE
+ALTER ROLE
+GRANT
+
+### EVIRONMENT VARIABLE FILE .ENV EXAMPLE
+DRIVER="psycopg2"
+DATABASE_URL="postgres://"
+DATABASE_HOST="0.0.0.0"
+DATABASE_USERNAME="<YOUR_USER>"
+DATABASE_PASSWORD="<YOUR_PASSWORD>"
+DATABASE_NAME="<YOUR_DB_NAME>"
+NEXTAUTH_SECRET=
+SALT=
+PORT="<YOUR_PORT_FOR_LANGFUSE>" # 3000 by default
+
+# now that the db is created we can use same env. vars which are referenced in the script to launch the docker langfuse
+so install it:
+sh docker_lanfuse.sh 
+
+### FINALLY USED DOCKER COMPOSE TO INSTALL IT COMES WITH DOCKER POSTGRESQL WITH IT
+# Clone the Langfuse repository
+git clone https://github.com/langfuse/langfuse.git
+cd langfuse
+docker compose up
+
+# update to latest version to keep up with security updates
+#Navigate to the Langfuse directory
+cd langfuse
+# Stop the server and database
+docker compose down
+# Fetch the latest changes
+git pull
+docker-compose pull
+# Restart the server and database
+docker compose up
+
+# install langfuse
+pip install langfuse
+
+# use langfuse as decorator using  @observe()
+from langfuse.decorators import observe
+
+# use langchain normal invoke(), call(), run() or predict() and add a callback handler that uses langfuse to trace llm calls
+# Initialize Langfuse handler
+from langfuse.callback import CallbackHandler
+langfuse_handler = CallbackHandler(
+    secret_key="sk-lf-...",
+    public_key="pk-lf-...",
+    host="https://cloud.langfuse.com", # just put localhost here probably
+)
+...
+lanchain code logic
+...
+# Add Langfuse handler as callback (classic and LCEL) to you invokation or runs (invoke(), predict(), run()):
+chain.invoke({"input": "<user_input>"}, config={"callbacks": [langfuse_handler]})
+chain.run(input="<user_input>", callbacks=[langfuse_handler])
+conversation.predict(input="<user_input>", callbacks=[langfuse_handler])
+
+# flush or shutdown the background processes. flush will not turn of langfuse while shutdown will shut if down.
+# This is to get rid of all running background tasks, just do this before the applicaiton exists as your are tracing while app is working only
+langfuse_handler.shutdown_async()
+langfuse_handler.flush_async()
+
+# can use openai and then provide the url to direct to local lmstudio
+from langfuse.openai import openai
+client = openai.OpenAI(base_url="<put_url_here>")
+
+# now when you use chat.completion you can add the parameter 'name' to have a trace in langfuse of that interaction as custom observation:
+gpt_completion = client.chat.completions.create(
+  model="gpt-3.5-turbo",
+  name="rap-gpt-3.5-turbo", # add custom name to Langfuse observation
+  messages=messages,
+)
+# openai.chat.completions.create() other custom parameter that can be added:
+name                   Set name to identify a specific type of generation.
+metadata               Set metadata with additional information that you want to see in Langfuse.
+session_id             The current session.
+user_id                The current user_id.
+tags                   Set tags to categorize and filter traces.
+trace_id               See "Interoperability with Langfuse Python SDK" (below) for more details.
+parent_observation_id  See "Interoperability with Langfuse Python SDK" (below) for more details.
+
+### langfuse create prompt also possible to then use it in langchain prompt and chain invokation:
+langfuse.create_prompt(
+    name="event-planner",
+    prompt=
+    "Plan an event titled {{Event Name}}. The event will be about: {{Event Description}}. "
+    "The event will be held in {{Location}} on {{Date}}. "
+    "Consider the following factors: audience, budget, venue, catering options, and entertainment. "
+    "Provide a detailed plan including potential vendors and logistics.",
+    config={
+        "model":"gpt-3.5-turbo-1106",
+        "temperature": 0,
+    },
+    is_active=True
+);
+
+langfuse_prompt = langfuse.get_prompt("event-planner")
+print(langfuse_prompt.prompt)
+
+# make the prompt usable in langchain:
+from langchain_core.prompts import ChatPromptTemplate 
+langchain_prompt = ChatPromptTemplate.from_template(langfuse_prompt.get_langchain_prompt())
+
+# can also extract prompt configuration to reuse in code:
+model = langfuse_prompt.config["model"]
+temperature = str(langfuse_prompt.config["temperature"])
+
+# Create Langchain chain based on prompt
+from langchain_openai import ChatOpenAI
+model = ChatOpenAI(model=model, temperature=temperature)
+chain = langchain_prompt | model
+example_input = {
+    "Event Name": "Wedding",
+    "Event Description": "The wedding of Julia and Alex, a charming couple who share a love for art and nature. This special day will celebrate their journey together with a blend of traditional and contemporary elements, reflecting their unique personalities.",
+    "Location": "Central Park, New York City",
+    "Date": "June 5, 2024"
+}
+# we pass the callback handler to the chain to trace the run in Langfuse
+response = chain.invoke(input=example_input,config={"callbacks":[langfuse_callback_handler]})
+print(response.content)
+
+# function tracking example
+pip install pydantic --upgrade
+from typing import List
+from pydantic import BaseModel
+ class StepByStepAIResponse(BaseModel):
+    title: str
+    steps: List[str]
+schema = StepByStepAIResponse.schema() # returns a dict like JSON schema
+import json
+response = openai.chat.completions.create(
+    name="test-function",
+    model="gpt-3.5-turbo-0613",
+    messages=[
+       {"role": "user", "content": "Explain how to assemble a PC"}
+    ],
+    functions=[
+        {
+          "name": "get_answer_for_user_query",
+          "description": "Get user answer in series of steps",
+          "parameters": StepByStepAIResponse.schema()
+        }
+    ],
+    function_call={"name": "get_answer_for_user_query"}
+)
+output = json.loads(response.choices[0].message.function_call.arguments)
+
+# openai from their doc new tool parameter for function calling (just to have this info as the previous parameter is deprecated):
+tools = [
+  {
+    "type": "function",
+    "function": {
+      "name": "get_current_weather",
+      "description": "Get the current weather in a given location",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "type": "string",
+            "description": "The city and state, e.g. San Francisco, CA",
+          },
+          "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
+        },
+        "required": ["location"],
+      },
+    }
+  }
+]
+
+# '@observe(as_type="generation")' to trace  LLM calls.
+# openai integration so can use also for lmstudio by changing the base_url, here we just use @observe() instead of the 'any llm' mode '@observe(as_type="generation")'
+from langfuse.decorators import observe
+from langfuse.openai import openai # OpenAI integration
+@observe()
+def story():
+    return openai.chat.completions.create(
+        model="gpt-3.5-turbo",
+        max_tokens=100,
+        messages=[
+          {"role": "system", "content": "You are a great storyteller."},
+          {"role": "user", "content": "Once upon a time in a galaxy far, far away..."}
+        ],
+    ).choices[0].message.content
+@observe()
+def main():
+    return story() 
+main()
+
+## For the databases
+created one local database and another database is coming in docker for langfuse traces. port mapping 5433:5432 for the docker one and I kept the local postgresql database to 5432 for the embeddings and collection creation
+installed in the local environement pgvector, psycopg2, psycopg2-binary
+sudo apt install postgresql-15-pgvector
+pip install psycopg2
+pip install psycopg2-binary
+pip install wheel
+pip install build-essential
+pip install pgvector
+
+# Install postgresql16 and pgvector:
+sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+sudo apt-get update
+sudo apt-get upgrade
+sudo apt-get install postgresql-16 -y
+sudo nano /etc/postgresql/16/main/postgresql.conf  and set listen_addresses = "*"
+'ip a' to get your ip: 192.168.186.129
+sudo nano /etc/postgresql/16/main/pg_hba.conf
+find he local ipv4 connection line and add under it: host    all             all             192.168.186.129/0            md5
+sudo systemctl start postgresql && sudo systemctl enable postgresql
+sudo systemctl status postgresql
+sudo apt install postgresql-16-pgvector
+# create database, user and all privileges and connect to db to create the extension
+sudo -u creditizens psql -d creditizens_vector_db
+create extention vector;
+ALTER DATABASE creditizens_vector_db OWNER TO creditizens;
+
+# need to change the model name in ollama file:
+nano /home/creditizens/lang_lang/lang_venv/lib/python3.10/site-packages/langchain_community/embeddings/ollama.py
+change it to mistral:7b instead of the deault llama2
+
+# embeddings db headers
+ collection_id | embedding | document | cmetadata | custom_id | uuid 
+
+query with: select embedding,... from langchain_pg_embedding; ...
+
+## LMSTUDIO
+# implement retry when having this error:
+TypeError: 'NoneType' object is not subscriptable
+as sometimes is because you just started the server and the first call returns a nontype object while after that it works fine.
+
+# prompt inputs from user test doc capital cities in the world
+./docs/World_Capital_City_Names_and_Country_Names_paper.pdf
+what is the name of the country at number 153 and its capital city? 
+
+############### LANGFUSE ###################
+
+# update traces
+langfuse_context.update_current_observation (reference): Update the trace/span of the current function scope
+langfuse_context.update_current_trace (reference): Update the trace itself, can also be called within any deeply nested span within the trace
+
+import os
+from langfuse import Langfuse
+from langfuse.decorators import observe, langfuse_context
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
+langfuse = Langfuse(
+  secret_key=os.gentenv("LANG_SECRET_KEY"),
+  public_key=os.gentenv("LANG_PUBLIC_KEY"),
+  host=os.getenv("LANG_HOST")
+)
+
+# Wrap LLM function with decorator to get any llm observed through langfuse: @observe(as_type="generation")
+# example function optional, extract some fields from kwargs
+# update observation
+"""
+# update observation
+  kwargs_clone = kwargs.copy()
+  input = kwargs_clone.pop('messages', None)
+  model = kwargs_clone.pop('model', None)
+  langfuse_context.update_current_observation(
+      input=input,
+      model=model,
+      metadata=kwargs_clone
+  )
+"""
+# update trace/observation
+"""
+# update trace attributes (e.g, name, session_id, user_id)
+    langfuse_context.update_current_trace(
+        name="custom-trace",
+        session_id="user-1234",
+        user_id="session-1234",
+    )
+# get the langchain handler for the current trace
+  langfuse_handler = langfuse_context.get_current_langchain_handler()
+
+  ...
+  # Your Langchain code
+  ...
+
+  # Add Langfuse handler as callback (classic and LCEL)
+  chain.invoke({"input": "<user_input>"}, config={"callbacks": [langfuse_handler]})
+
+"""
+
+# get get the URL of the current trace using 
+"""
+langfuse_context.get_current_trace_url()
+"""
+
+# Get trace and observation IDs 
+"""
+langfuse_context.get_current_trace_id()
+langfuse_context.get_current_observation_id()
+"""
+
+# enrish the observation
+# get traces sanitized captured. So here you don't want to show raw imput/output so you have function or a system to sanitize those and trace those
+# therefore, have control on output/input by deactivating first the @observe() default behavior which is to capture all
+"""
+ langfuse_context.update_current_observation(
+        input="sanitized input", # any serializable object
+        output="sanitized output", # any serializable object
+    )
+"""
+
+# for langchain app
+"""
+# Initialize Langfuse handler
+from langfuse.callback import CallbackHandler
+langfuse_handler = CallbackHandler(
+    secret_key="sk-lf-...",
+    public_key="pk-lf-...",
+    host="https://cloud.langfuse.com", # just put localhost here probably
+)
+
+# Your Langchain code
+
+# Add Langfuse handler as callback (classic and LCEL) to you invokation or runs (invoke(), predict(), run(), call()):
+chain.invoke({"input": "<user_input>"}, config={"callbacks": [langfuse_handler]})
+chain.run(input="<user_input>", callbacks=[langfuse_handler])
+conversation.predict(input="<user_input>", callbacks=[langfuse_handler])
+"""
+
+# traces are processed on the background to have all of those tasls treated and not lost when the application stops you can use the  '.flush()'.
+# It is blocking so like a graceful stop of the app with traces tasks done and recorded properly.
+"""
+langfuse_context.flush()
+"""
+
+# Score object in Langfuse (used to evaluate single executions/traces):
+
+Attribute	Type	Description
+name	        string	Name of the score, e.g. user_feedback, hallucination_eval
+value	        number	Value of the score
+traceId    	string	Id of the trace the score relates to
+observationId	string	Optional: Observation (e.g. LLM call) the score relates to
+comment  	string	Optional: Evaluation comment, commonly used for user feedback, eval output or internal notes
+
+# Trace object in Langfuse:
+
+Parameter	Type	Optional	Description
+id      	string	yes	        The id of the trace can be set, defaults to a random id. Set it to link traces to external systems or when creating a distributed trace. Traces are upserted on id.
+name     	string	yes	        Identifier of the trace. Useful for sorting/filtering in the UI.
+input	        object	yes	        The input of the trace. Can be any JSON object.
+output	        object	yes	        The output of the trace. Can be any JSON object.
+metadata	object	yes	        Additional metadata of the trace. Can be any JSON object. Metadata is merged when being updated via the API.
+user_id	        string	yes	        The id of the user that triggered the execution. Used to provide user-level analytics.
+session_id	string	yes	        Used to group multiple traces into a session in Langfuse. Use your own session/thread identifier.
+version	        string	yes	        The version of the trace type. Used to understand how changes to the trace type affect metrics. Useful in debugging.
+release  	string	yes	        The release identifier of the current deployment. Used to understand how changes of different deployments affect metrics. Useful in debugging.
+tags	        string[]yes	        Tags are used to categorize or label traces. Traces can be filtered by tags in the UI and GET API. Tags can also be changed in the UI. Tags are merged and never deleted via the API.
+public	        boolean	yes	        You can make a trace public to share it via a public link. This allows others to view the trace without needing to log in or be members of your Langfuse project.
+
+
+# Span object in Langfuse (Spans represent durations of units of work in a trace.):
+
+Parameter	Type	Optional	Description
+id       	string	yes	        The id of the span can be set, otherwise a random id is generated. Spans are upserted on id.
+start_time	datetime.datetime  yes	The time at which the span started, defaults to the current time.
+end_time	datetime.datetime  yes	The time at which the span ended. Automatically set by span.end().
+name	        string	yes	        Identifier of the span. Useful for sorting/filtering in the UI.
+metadata	object	yes	        Additional metadata of the span. Can be any JSON object. Metadata is merged when being updated via the API.
+level     	string	yes	        The level of the span. Can be DEBUG, DEFAULT, WARNING or ERROR. Used for sorting/filtering of traces with elevated error levels and for highlighting in the UI.
+status_message	string	yes	        The status message of the span. Additional field for context of the event. E.g. the error message of an error event.
+input   	object	yes	        The input to the span. Can be any JSON object.
+output	        object	yes	        The output to the span. Can be any JSON object.
+version	        string	yes	        The version of the span type. Used to understand how changes to the span type affect metrics. Useful in debugging.
+
+
+# Generation object in Langfuse (used to log generations of AI models):
+
+Parameter	Type	Optional	Description
+id	        string	yes	        The id of the generation can be set, defaults to random id.
+name     	string	yes	        Identifier of the generation. Useful for sorting/filtering in the UI.
+start_time	datetime.datetime  yes	The time at which the generation started, defaults to the current time.
+completion_start_time	datetime.datetime yes	The time at which the completion started (streaming). Set it to get latency analytics broken down into time until completion started and completion duration.
+end_time	datetime.datetime  yes	The time at which the generation ended. Automatically set by generation.end().
+model	        string	yes	        The name of the model used for the generation.
+model_parametersobject	yes	        The parameters of the model used for the generation; can be any key-value pairs.
+input	        object	yes	        The prompt used for the generation. Can be any string or JSON object.
+output	        string	yes	        The completion generated by the model. Can be any string or JSON object.
+usage	        object	yes	        The usage object supports the OpenAi structure with {promptTokens, completionTokens, totalTokens} and a more generic version {input, output, total, unit, inputCost, outputCost, totalCost} where unit can be of value "TOKENS", "CHARACTERS", "MILLISECONDS", "SECONDS", or "IMAGES". Refer to the docs on how to automatically infer token usage and costs in Langfuse.
+metadata	object	yes	        Additional metadata of the generation. Can be any JSON object. Metadata is merged when being updated via the API.
+level	        string	yes	        The level of the generation. Can be DEBUG, DEFAULT, WARNING or ERROR. Used for sorting/filtering of traces with elevated error levels and for highlighting in the UI.
+status_message	string	yes	        The status message of the generation. Additional field for context of the event. E.g. the error message of an error event.
+version	        string	yes	        The version of the generation type. Used to understand how changes to the span type affect metrics. Useful in debugging.
+
+
+# Event object in Langfuse (used to track discrete events in a trace):
+
+Parameter	Type	Optional	Description
+id	        string	yes	        The id of the event can be set, otherwise a random id is generated.
+start_time	datetime.datetime  yes	The time at which the event started, defaults to the current time.
+name	        string	yes	        Identifier of the event. Useful for sorting/filtering in the UI.
+metadata	object	yes	        Additional metadata of the event. Can be any JSON object. Metadata is merged when being updated via the API.
+level	        string	yes        	The level of the event. Can be DEBUG, DEFAULT, WARNING or ERROR. Used for sorting/filtering of traces with elevated error levels and for highlighting in the UI.
+status_message	string	yes	        The status message of the event. Additional field for context of the event. E.g. the error message of an error event.
+input	        object	yes	        The input to the event. Can be any JSON object.
+output	        object	yes	        The output to the event. Can be any JSON object.
+version	        string	yes     	The version of the event type. Used to understand how changes to the event type affect metrics. Useful in debugging.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### LANGFLOW INSTALLATION
+pip install langflow --pre --force-reinstall
+langflow run
+
+
+
+
+
+
+
+
+
+
+
