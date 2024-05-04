@@ -384,14 +384,15 @@ response_metadata={
 id='run-de4928db-3834-42c3-8244-bfd1292165ea-0'
 """
 
-question = "What is the biggest city in Asia?"
+question = "What is the capital city of Japan?"
 @observe()
 def main(question):
   return chat_with_groq(text=question) # dictionary to be passed in
 
-print(main(question))
+#print(main(question))
 
 
-
+# Command to launch Langflow from this script maybe before the app logic starts
+os.system(f"LANGFLOW_LANGFUSE_SECRET_KEY={os.getenv('LANG_SECRET_KEY')} LANGFLOW_LANGFUSE_PUBLIC_KEY={os.getenv('LANG_PUBLIC_KEY')} langflow run")
 
 

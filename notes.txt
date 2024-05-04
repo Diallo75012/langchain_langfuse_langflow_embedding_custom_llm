@@ -17,11 +17,9 @@ langfuse/langfuse:2
 
 # create a randomly generate key and save it in you .env file for the SALT variable of langfuse
 openssl rand -base64 32
-outputs: IHU55ma/DmmwHGqkAM+22gyXeDdpG/yujYrdK81Ouf0=
 
 # do the same to generate the NEXTAUTH_SECRET variable
 openssl rand -base64 32
-outputs: 3doC8TqLv4fkaxgGCZUlPjgbzaOq/iWvyi2yrnoYITo=
 
 #### POSTGRESQL 
 # user creation script
@@ -499,8 +497,11 @@ version	        string	yes     	The version of the event type. Used to understan
 pip install langflow --pre --force-reinstall
 langflow run
 
+# try to run langflow just before the app logic starts using the following command in the code but using .env for the environment variables and 'os' to execute it in the shell
+LANGFLOW_LANGFUSE_SECRET_KEY=secret_key LANGFLOW_LANGFUSE_PUBLIC_KEY=public_key langflow run
 
 
+model="TheBloke/OpenHermes-2.5-Mistral-7B-GGUF/openhermes-2.5-mistral-7b.Q3_K_M.gguf"
 
 
 

@@ -1,0 +1,34 @@
+# LANGFUSE ENV VARS TO TRACE FUNCTIONS LLMS
+LANG_SECRET_KEY=
+LANG_PUBLIC_KEY=
+LANG_HOST="http://localhost:3000"
+# default langfuse env vars
+LANGFUSE_SECRET_KEY=
+LANGFUSE_PUBLIC_KEY=
+LANGFUSE_HOST="http://localhost:3000"
+
+# LANGFUSE AND LANGFLOW
+LANGFLOW_LANGFUSE_SECRET_KEY=
+LANGFLOW_LANGFUSE_PUBLIC_KEY=
+LANGFLOW_LANGFUSE_HOST="http://localhost:3000"
+
+# OPENAI ENV
+OPENAI_API_KEY="no_key_needed_lmstudio_powaaaaaaaa_or_other"
+
+# local postgresql db for app different from the one in docker for langfuse
+DRIVER=psycopg2
+HOST=
+PORT=
+DATABASE=
+USER=
+PASSWORD=
+COLLECTION_NAME=
+
+#Groq
+GROQ_API_KEY=""
+MODEL_MIXTRAL_7B="mixtral-8x7b-32768"
+MODEL_LLAMA3_70B="llama3-70b-8192"
+MODEL="mixtral-8x7b-32768"
+# OPENAI_API_BASE_GROQ="https://api.groq.com/openai/v1"
+GROQ_MAX_TOKEN=
+GROQ_TEMPERATURE=

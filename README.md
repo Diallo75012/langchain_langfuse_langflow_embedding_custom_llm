@@ -34,3 +34,9 @@ docker compose up
 ```bash
 langflow run
 ```
+
+# start the app
+```python
+python3 embedding_library.py
+
+```
